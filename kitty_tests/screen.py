@@ -303,6 +303,59 @@ class TestScreen(BaseTest):
         s.resize(s.lines - 1, s.columns)
         self.ae(x_before, s.cursor.x)
 
+    def test_scrollback_fill_after_resize(self):
+        def prepare_screen(content=()):
+            ans = self.create_screen(options={'scrollback_fill_enlarged_window': True})
+            for line in content:
+                ans.draw(line)
+                ans.linefeed()
+                ans.carriage_return()
+            return ans
+
+        def assert_lines(*lines):
+            return self.ae(lines, tuple(str(s.line(i)) for i in range(s.lines)))
+
+        # Height increased, width unchanged → pull down lines to fill new space at the top
+        s = prepare_screen(map(str, range(6)))
+        assert_lines('2', '3', '4', '5', '')
+        dist_from_bottom = s.lines - s.cursor.y
+        s.resize(7, s.columns)
+        assert_lines('0', '1', '2', '3', '4', '5', '')
+        self.ae(dist_from_bottom, s.lines - s.cursor.y)
+
+        # Height increased, width increased → rewrap, pull down
+        s = prepare_screen(['0', '1', '2', '3' * 15])
+        assert_lines('2', '33333', '33333', '33333', '')
+        s.resize(7, 12)
+        assert_lines('0', '1', '2', '333333333333', '333', '', '')
+
+        # Height increased, width decreased → rewrap, pull down if possible
+        s = prepare_screen(['0', '1', '2', '3' * 5])
+        assert_lines('0', '1', '2', '33333', '')
+        s.resize(6, 4)
+        assert_lines('0', '1', '2', '3333', '3', '')
+
+        # Height unchanged, width increased → rewrap, pull down if possible
+        s = prepare_screen(['0', '1', '2', '3' * 15])
+        assert_lines('2', '33333', '33333', '33333', '')
+        s.resize(s.lines, 12)
+        assert_lines('1', '2', '333333333333', '333', '')
+
+        # Height decreased, width increased → rewrap, pull down if possible
+        s = prepare_screen(['0', '1', '2', '3' * 15])
+        assert_lines('2', '33333', '33333', '33333', '')
+        s.resize(4, 12)
+        assert_lines('2', '333333333333', '333', '')
+
+        # Height increased with large continued text
+        s = self.create_screen(options={'scrollback_fill_enlarged_window': True})
+        s.draw(('x' * (s.columns * s.lines * 2)) + 'abcde')
+        s.carriage_return(), s.linefeed()
+        s.draw('>')
+        assert_lines('xxxxx', 'xxxxx', 'xxxxx', 'abcde', '>')
+        s.resize(s.lines + 2, s.columns)
+        assert_lines('xxxxx', 'xxxxx', 'xxxxx', 'xxxxx', 'xxxxx', 'abcde', '>')
+
     def test_tab_stops(self):
         # Taken from vttest/main.c
         s = self.create_screen(cols=80, lines=2)
@@ -603,6 +656,13 @@ class TestScreen(BaseTest):
         self.ae(s.marked_cells(), cells(8))
         s.set_marker(marker_from_regex('\t', 3))
         self.ae(s.marked_cells(), cells(*range(8)))
+        s = self.create_screen()
+        s.cursor.x = 2
+        s.draw('x')
+        s.cursor.x += 1
+        s.draw('x')
+        s.set_marker(marker_from_function(mark_x))
+        self.ae(s.marked_cells(), [(2, 0, 1), (4, 0, 2)])
 
     def test_hyperlinks(self):
         s = self.create_screen()

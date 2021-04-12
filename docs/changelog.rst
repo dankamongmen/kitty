@@ -25,6 +25,10 @@ To update |kitty|, :doc:`follow the instructions <binary>`.
 - A new option :opt:`tab_powerline_style` to control the appearance of the tab
   bar when using the powerline tab bar style.
 
+- A new option :opt:`scrollback_fill_enlarged_window` to fill extra lines in
+  the window when the window is expanded with lines from the scrollback
+  (:pull:`3371`)
+
 - diff kitten: Implement recursive diff over SSH (:iss:`3268`)
 
 - ssh kitten: Allow using python instead of the shell on the server, useful if
@@ -43,13 +47,23 @@ To update |kitty|, :doc:`follow the instructions <binary>`.
 - Double clicking on empty tab bar area now opens a new tab (:iss:`3201`)
 
 - When passing a directory or a non-executable file as the program to run to
-  kitty open it with the shell, instead of just failing.
+  kitty opens it with the shell or by parsing the shebang, instead of just failing.
 
 - Linux: Fix rendering of emoji followed by the graphics variation selector not
   being colored with some fonts (:iss:`3211`)
 
 - Unicode input: Fix using index in select by name mode not working for indices
   larger than 16. Also using an index does not filter the list of matches. (:pull:`3219`)
+
+- Wayland: Add support for the text input protocol (:iss:`3410`)
+
+- Wayland: Fix mouse handling when using client side decorations
+
+- Wayland: Fix un-maximizing a window not restoring its size to what it was
+  before being maximized
+
+- GNOME/Wayland: Improve window decorations the titlebar now shows the window
+  title. Allow running under Wayland on GNOME by default. (:iss:`3284`)
 
 - Panel kitten: Allow setting WM_CLASS (:iss:`3233`)
 
@@ -90,6 +104,22 @@ To update |kitty|, :doc:`follow the instructions <binary>`.
 
 - Graphics protocol: Fix suppression of responses not working for chunked
   transmission (:iss:`3375`)
+
+- Fix inactive tab closing causing active tab to change (:iss:`3398`)
+
+- Fix a crash on systems using musl as libc (:iss:`3395`)
+
+- Improve rendering of rounded corners by using a rectircle equation rather
+  than a cubic bezier (:iss:`3409`)
+
+- Graphics protocol: Add a control to allow clients to specify that the cursor
+  should not move when displaying an image (:iss:`3411`)
+
+- Fix marking of text not working on lines that contain zero cells
+  (:iss:`3403`)
+
+- Fix the selection getting changed if the screen contents scroll while
+  the selection is in progress (:iss:`3431`)
 
 
 0.19.3 [2020-12-19]

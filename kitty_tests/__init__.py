@@ -94,7 +94,8 @@ class BaseTest(TestCase):
     def create_screen(self, cols=5, lines=5, scrollback=5, cell_width=10, cell_height=20, options=None):
         self.set_options(options)
         c = Callbacks()
-        return Screen(c, lines, cols, scrollback, cell_width, cell_height, 0, c)
+        s = Screen(c, lines, cols, scrollback, cell_width, cell_height, 0, c)
+        return s
 
     def assertEqualAttributes(self, c1, c2):
         x1, y1, c1.x, c1.y = c1.x, c1.y, 0, 0

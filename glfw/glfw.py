@@ -89,7 +89,7 @@ def init_env(env: Env, pkg_config: Callable, pkg_version: Callable, at_least_ver
 
     elif module == 'cocoa':
         ans.cppflags.append('-DGL_SILENCE_DEPRECATION')
-        for f_ in 'Cocoa IOKit CoreFoundation CoreVideo'.split():
+        for f_ in 'Cocoa Carbon IOKit CoreFoundation CoreVideo'.split():
             ans.ldpaths.extend(('-framework', f_))
 
     elif module == 'wayland':
@@ -179,13 +179,12 @@ class Function:
         )
 
     def load(self) -> str:
-        ans = '*(void **) (&{name}_impl) = dlsym(handle, "{name}");'.format(
-            name=self.name
-        )
+        ans = f'*(void **) (&{self.name}_impl) = dlsym(handle, "{self.name}");'
+        ans += f'\n    if ({self.name}_impl == NULL) '
         if self.check_fail:
-            ans += '\n    if ({name}_impl == NULL) fail("Failed to load glfw function {name} with error: %s", dlerror());'.format(
-                name=self.name
-            )
+            ans += f'fail("Failed to load glfw function {self.name} with error: %s", dlerror());'
+        else:
+            ans += 'dlerror(); // clear error indicator'
         return ans
 
 

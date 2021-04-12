@@ -293,6 +293,10 @@ class Tab:  # {{{
                 cmd = self.args.args or resolved_shell(self.opts)
         if check_for_suitability:
             old_exe = cmd[0]
+            if not os.path.isabs(old_exe):
+                import shutil
+                actual_exe = shutil.which(old_exe)
+                old_exe = actual_exe if actual_exe else os.path.abspath(old_exe)
             try:
                 is_executable = os.access(old_exe, os.X_OK)
             except OSError:
@@ -745,29 +749,34 @@ class TabManager:  # {{{
 
     def remove(self, tab: Tab) -> None:
         self._remove_tab(tab)
-        next_active_tab = -1
+        try:
+            active_tab_needs_to_change = self.active_tab is None or self.active_tab is tab
+        except IndexError:
+            active_tab_needs_to_change = True
         while True:
             try:
                 self.active_tab_history.remove(tab.id)
             except ValueError:
                 break
 
-        if self.opts.tab_switch_strategy == 'previous':
-            while self.active_tab_history and next_active_tab < 0:
-                tab_id = self.active_tab_history.pop()
-                for idx, qtab in enumerate(self.tabs):
-                    if qtab.id == tab_id:
-                        next_active_tab = idx
-                        break
-        elif self.opts.tab_switch_strategy == 'left':
-            next_active_tab = max(0, self.active_tab_idx - 1)
-        elif self.opts.tab_switch_strategy == 'right':
-            next_active_tab = min(self.active_tab_idx, len(self.tabs) - 1)
+        if active_tab_needs_to_change:
+            next_active_tab = -1
+            if self.opts.tab_switch_strategy == 'previous':
+                while self.active_tab_history and next_active_tab < 0:
+                    tab_id = self.active_tab_history.pop()
+                    for idx, qtab in enumerate(self.tabs):
+                        if qtab.id == tab_id:
+                            next_active_tab = idx
+                            break
+            elif self.opts.tab_switch_strategy == 'left':
+                next_active_tab = max(0, self.active_tab_idx - 1)
+            elif self.opts.tab_switch_strategy == 'right':
+                next_active_tab = min(self.active_tab_idx, len(self.tabs) - 1)
 
-        if next_active_tab < 0:
-            next_active_tab = max(0, min(self.active_tab_idx, len(self.tabs) - 1))
+            if next_active_tab < 0:
+                next_active_tab = max(0, min(self.active_tab_idx, len(self.tabs) - 1))
 
-        self._set_active_tab(next_active_tab)
+            self._set_active_tab(next_active_tab)
         self.mark_tab_bar_dirty()
         tab.destroy()
 

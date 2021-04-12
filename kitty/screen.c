@@ -212,6 +212,58 @@ realloc_lb(LineBuf *old, unsigned int lines, unsigned int columns, index_type *n
     return ans;
 }
 
+static inline bool
+is_selection_empty(const Selection *s) {
+    int start_y = (int)s->start.y - (int)s->start_scrolled_by, end_y = (int)s->end.y - (int)s->end_scrolled_by;
+    return s->start.x == s->end.x && s->start.in_left_half_of_cell == s->end.in_left_half_of_cell && start_y == end_y;
+}
+
+static inline void
+index_selection(const Screen *self, Selections *selections, bool up) {
+    for (size_t i = 0; i < selections->count; i++) {
+        Selection *s = selections->items + i;
+        if (up) {
+            if (s->start.y == 0) s->start_scrolled_by += 1;
+            else {
+                s->start.y--;
+                if (s->input_start.y) s->input_start.y--;
+                if (s->input_current.y) s->input_current.y--;
+            }
+            if (s->end.y == 0) s->end_scrolled_by += 1;
+            else s->end.y--;
+        } else {
+            if (s->start.y >= self->lines - 1) s->start_scrolled_by -= 1;
+            else {
+                s->start.y++;
+                if (s->input_start.y < self->lines - 1) s->input_start.y++;
+                if (s->input_current.y < self->lines - 1) s->input_current.y++;
+            }
+            if (s->end.y >= self->lines - 1) s->end_scrolled_by -= 1;
+            else s->end.y++;
+        }
+    }
+}
+
+
+#define INDEX_GRAPHICS(amtv) { \
+    bool is_main = self->linebuf == self->main_linebuf; \
+    static ScrollData s; \
+    s.amt = amtv; s.limit = is_main ? -self->historybuf->ynum : 0; \
+    s.has_margins = self->margin_top != 0 || self->margin_bottom != self->lines - 1; \
+    s.margin_top = top; s.margin_bottom = bottom; \
+    grman_scroll_images(self->grman, &s, self->cell_size); \
+}
+
+
+#define INDEX_DOWN \
+    if (self->overlay_line.is_active) deactivate_overlay_line(self); \
+    linebuf_reverse_index(self->linebuf, top, bottom); \
+    linebuf_clear_line(self->linebuf, top); \
+    INDEX_GRAPHICS(1) \
+    self->is_dirty = true; \
+    index_selection(self, &self->selections, false);
+
+
 static bool
 screen_resize(Screen *self, unsigned int lines, unsigned int columns) {
     if (self->overlay_line.is_active) deactivate_overlay_line(self);
@@ -221,6 +273,7 @@ screen_resize(Screen *self, unsigned int lines, unsigned int columns) {
     index_type num_content_lines_before, num_content_lines_after, num_content_lines;
     unsigned int cursor_x = 0, cursor_y = 0;
     bool cursor_is_beyond_content = false;
+    unsigned int lines_after_cursor_before_resize = self->lines - self->cursor->y;
 #define setup_cursor() { \
         cursor_x = x; cursor_y = y; \
         cursor_is_beyond_content = num_content_lines_before > 0 && self->cursor->y >= num_content_lines_before; \
@@ -236,6 +289,8 @@ screen_resize(Screen *self, unsigned int lines, unsigned int columns) {
     index_type x = self->cursor->x, y = self->cursor->y;
     LineBuf *n = realloc_lb(self->main_linebuf, lines, columns, &num_content_lines_before, &num_content_lines_after, self->historybuf, &x, &y, &self->as_ansi_buf);
     if (n == NULL) return false;
+
+
     Py_CLEAR(self->main_linebuf); self->main_linebuf = n;
     if (is_main) setup_cursor();
     grman_resize(self->main_grman, self->lines, lines, self->columns, columns);
@@ -270,6 +325,15 @@ screen_resize(Screen *self, unsigned int lines, unsigned int columns) {
     if (cursor_is_beyond_content) {
         self->cursor->y = num_content_lines;
         if (self->cursor->y >= self->lines) { self->cursor->y = self->lines - 1; screen_index(self); }
+    }
+    if (is_main && OPT(scrollback_fill_enlarged_window)) {
+        const unsigned int top = 0, bottom = self->lines-1;
+        while (self->cursor->y + 1 < self->lines && self->lines - self->cursor->y > lines_after_cursor_before_resize) {
+            if (!historybuf_pop_line(self->historybuf, self->alt_linebuf->line)) break;
+            INDEX_DOWN;
+            linebuf_copy_line_to(self->main_linebuf, self->alt_linebuf->line, 0);
+            self->cursor->y++;
+        }
     }
     return true;
 }
@@ -368,12 +432,6 @@ move_widened_char(Screen *self, CPUCell* cpu_cell, GPUCell *gpu_cell, index_type
     }
     *dest_cpu = src_cpu;
     *dest_gpu = src_gpu;
-}
-
-static inline bool
-is_selection_empty(const Selection *s) {
-    int start_y = (int)s->start.y - (int)s->start_scrolled_by, end_y = (int)s->end.y - (int)s->end_scrolled_by;
-    return s->start.x == s->end.x && s->start.in_left_half_of_cell == s->end.in_left_half_of_cell && start_y == end_y;
 }
 
 static inline bool
@@ -566,7 +624,7 @@ screen_draw_overlay_text(Screen *self, const char *utf8_text) {
     self->overlay_line.ynum = self->cursor->y;
     self->overlay_line.xstart = self->cursor->x;
     self->overlay_line.xnum = 0;
-    uint32_t codepoint = 0, state = UTF8_ACCEPT;
+    uint32_t codepoint = 0; UTF8State state = UTF8_ACCEPT;
     bool orig_line_wrap_mode = self->modes.mDECAWM;
     self->modes.mDECAWM = false;
     self->cursor->reverse ^= true;
@@ -886,6 +944,16 @@ screen_pop_key_encoding_flags(Screen *self, uint32_t num) {
     }
 }
 
+void
+screen_xtmodkeys(Screen *self, uint32_t p1, uint32_t p2) {
+    // this is the legacy XTerm escape code for modify keys
+    // https://invisible-island.net/xterm/ctlseqs/ctlseqs.html#h4-Functions-using-CSI-_-ordered-by-the-final-character-lparen-s-rparen:CSI-gt-Pp-m.1DB2
+    // we handle them as being equivalent to push and pop 1 onto the keyboard stack
+    if ((!p1 && !p2) || (p1 == 4 && p2 == 0)) screen_pop_key_encoding_flags(self, 1);
+    else if (p1 == 4 && p2 == 1) screen_push_key_encoding_flags(self, 1);
+}
+
+
 // }}}
 
 // Cursor {{{
@@ -1024,35 +1092,6 @@ screen_cursor_to_column(Screen *self, unsigned int column) {
     }
 }
 
-static inline void
-index_selection(const Screen *self, Selections *selections, bool up) {
-    for (size_t i = 0; i < selections->count; i++) {
-        Selection *s = selections->items + i;
-        if (!is_selection_empty(s)) {
-            if (up) {
-                if (s->start.y == 0) s->start_scrolled_by += 1;
-                else s->start.y--;
-                if (s->end.y == 0) s->end_scrolled_by += 1;
-                else s->end.y--;
-            } else {
-                if (s->start.y >= self->lines - 1) s->start_scrolled_by -= 1;
-                else s->start.y++;
-                if (s->end.y >= self->lines - 1) s->end_scrolled_by -= 1;
-                else s->end.y++;
-            }
-        }
-    }
-}
-
-#define INDEX_GRAPHICS(amtv) { \
-    bool is_main = self->linebuf == self->main_linebuf; \
-    static ScrollData s; \
-    s.amt = amtv; s.limit = is_main ? -self->historybuf->ynum : 0; \
-    s.has_margins = self->margin_top != 0 || self->margin_bottom != self->lines - 1; \
-    s.margin_top = top; s.margin_bottom = bottom; \
-    grman_scroll_images(self->grman, &s, self->cell_size); \
-}
-
 #define INDEX_UP \
     if (self->overlay_line.is_active) deactivate_overlay_line(self); \
     linebuf_index(self->linebuf, top, bottom); \
@@ -1085,14 +1124,6 @@ screen_scroll(Screen *self, unsigned int count) {
         INDEX_UP;
     }
 }
-
-#define INDEX_DOWN \
-    if (self->overlay_line.is_active) deactivate_overlay_line(self); \
-    linebuf_reverse_index(self->linebuf, top, bottom); \
-    linebuf_clear_line(self->linebuf, top); \
-    INDEX_GRAPHICS(1) \
-    self->is_dirty = true; \
-    index_selection(self, &self->selections, false);
 
 void
 screen_reverse_index(Screen *self) {
@@ -1949,7 +1980,7 @@ text_for_range(Screen *self, const Selection *sel, bool insert_newlines) {
         Line *line = range_line_(self, y);
         XRange xr = xrange_for_iteration(&idata, y, line);
         char leading_char = (i > 0 && insert_newlines && !line->continued) ? '\n' : 0;
-        PyObject *text = unicode_in_range(line, xr.x, xr.x_limit, true, leading_char);
+        PyObject *text = unicode_in_range(line, xr.x, xr.x_limit, true, leading_char, false);
         if (text == NULL) { Py_DECREF(ans); return PyErr_NoMemory(); }
         PyTuple_SET_ITEM(ans, i, text);
     }
@@ -2320,6 +2351,15 @@ clear_selection_(Screen *s, PyObject *args UNUSED) {
     Py_RETURN_NONE;
 }
 
+static PyObject*
+resize(Screen *self, PyObject *args) {
+    unsigned int a=1, b=1;
+    if(!PyArg_ParseTuple(args, "|II", &a, &b)) return NULL;
+    screen_resize(self, a, b);
+    if (PyErr_Occurred()) return NULL;
+    Py_RETURN_NONE;
+}
+
 WRAP0x(index)
 WRAP0(reverse_index)
 WRAP0(reset)
@@ -2329,7 +2369,6 @@ WRAP0(backspace)
 WRAP0(tab)
 WRAP0(linefeed)
 WRAP0(carriage_return)
-WRAP2(resize, 1, 1)
 WRAP2(set_margins, 1, 1)
 WRAP0(rescale_images)
 

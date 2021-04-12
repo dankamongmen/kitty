@@ -329,10 +329,12 @@ png_path_to_bitmap(const char* path, uint8_t** data, unsigned int* width, unsign
     inflate_png_inner(&d, buf, pos);
     free(buf);
     if (!d.ok) {
+        free(d.decompressed); free(d.row_pointers);
         log_error("Failed to decode PNG image at: %s", path);
         return false;
     }
     *data = d.decompressed;
+    free(d.row_pointers);
     *sz = d.sz;
     *height = d.height; *width = d.width;
     return true;
@@ -699,7 +701,9 @@ handle_put_command(GraphicsManager *self, const GraphicsCommand *g, Cursor *c, b
     update_src_rect(ref, img);
     update_dest_rect(ref, g->num_cells, g->num_lines, cell);
     // Move the cursor, the screen will take care of ensuring it is in bounds
-    c->x += ref->effective_num_cols; c->y += ref->effective_num_rows - 1;
+    if (g->cursor_movement != 1) {
+        c->x += ref->effective_num_cols; c->y += ref->effective_num_rows - 1;
+    }
     return img->client_id;
 }
 

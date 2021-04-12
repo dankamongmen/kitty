@@ -8,12 +8,12 @@
 #include "keys.h"
 #include "charsets.h"
 
-typedef enum { SHIFT=1, ALT=2, CTRL=4, SUPER=8 } ModifierMasks;
+typedef enum { SHIFT=1, ALT=2, CTRL=4, SUPER=8, HYPER=16, META=32} ModifierMasks;
 typedef enum { PRESS = 0, REPEAT = 1, RELEASE = 2} KeyAction;
 typedef struct {
     uint32_t key, shifted_key, alternate_key;
     struct {
-        bool shift, alt, ctrl, super;
+        bool shift, alt, ctrl, super, hyper, meta;
         unsigned value;
         char encoded[4];
     } mods;
@@ -48,11 +48,13 @@ is_modifier_key(const uint32_t key) {
 
 static inline void
 convert_glfw_mods(int mods, KeyEvent *ev) {
-    ev->mods.alt = (mods & GLFW_MOD_ALT) > 0, ev->mods.ctrl = (mods & GLFW_MOD_CONTROL) > 0, ev->mods.shift = (mods & GLFW_MOD_SHIFT) > 0, ev->mods.super = (mods & GLFW_MOD_SUPER) > 0;
+    ev->mods.alt = (mods & GLFW_MOD_ALT) > 0, ev->mods.ctrl = (mods & GLFW_MOD_CONTROL) > 0, ev->mods.shift = (mods & GLFW_MOD_SHIFT) > 0, ev->mods.super = (mods & GLFW_MOD_SUPER) > 0, ev->mods.hyper = (mods & GLFW_MOD_HYPER) > 0, ev->mods.meta = (mods & GLFW_MOD_META) > 0;
     ev->mods.value = ev->mods.shift ? SHIFT : 0;
     if (ev->mods.alt) ev->mods.value |= ALT;
     if (ev->mods.ctrl) ev->mods.value |= CTRL;
     if (ev->mods.super) ev->mods.value |= SUPER;
+    if (ev->mods.hyper) ev->mods.value |= HYPER;
+    if (ev->mods.meta) ev->mods.value |= META;
     snprintf(ev->mods.encoded, sizeof(ev->mods.encoded), "%u", ev->mods.value + 1);
 }
 
@@ -60,7 +62,7 @@ convert_glfw_mods(int mods, KeyEvent *ev) {
 static inline void
 init_encoding_data(EncodingData *ans, const KeyEvent *ev) {
     ans->add_actions = ev->report_all_event_types && ev->action != PRESS;
-    ans->has_mods = ev->mods.encoded[0] && ev->mods.encoded[0] != '1';
+    ans->has_mods = ev->mods.encoded[0] && ( ev->mods.encoded[0] != '1' || ev->mods.encoded[1] );
     ans->add_alternates = ev->report_alternate_key && ((ev->shifted_key > 0 && ev->mods.shift) || ev->alternate_key > 0);
     if (ans->add_alternates) { if (ev->mods.shift) ans->shifted_key = ev->shifted_key; ans->alternate_key = ev->alternate_key; }
     ans->action = ev->action;
@@ -90,7 +92,7 @@ serialize(const EncodingData *data, char *output, const char csi_trailer) {
     }
     if (third_field_not_empty) {
         const char *p = data->text;
-        uint32_t codep, state = UTF8_ACCEPT;
+        uint32_t codep; UTF8State state = UTF8_ACCEPT;
         bool first = true;
         while(*p) {
             if (decode_utf8(&state, &codep, *p) == UTF8_ACCEPT) {
@@ -167,6 +169,7 @@ encode_function_key(const KeyEvent *ev, char *output) {
             case GLFW_FKEY_DOWN: SIMPLE("\x1bOB");
             case GLFW_FKEY_RIGHT: SIMPLE("\x1bOC");
             case GLFW_FKEY_LEFT: SIMPLE("\x1bOD");
+            case GLFW_FKEY_KP_BEGIN: SIMPLE("\x1bOE");
             case GLFW_FKEY_END: SIMPLE("\x1bOF");
             case GLFW_FKEY_HOME: SIMPLE("\x1bOH");
             case GLFW_FKEY_F1: SIMPLE("\x1bOP");
@@ -220,6 +223,7 @@ encode_function_key(const KeyEvent *ev, char *output) {
         case GLFW_FKEY_F10: S(21, '~');
         case GLFW_FKEY_F11: S(23, '~');
         case GLFW_FKEY_F12: S(24, '~');
+        case GLFW_FKEY_KP_BEGIN: S(1, 'E');
 /* end special numbers */
         default: break;
     }
@@ -397,7 +401,7 @@ encode_key(const KeyEvent *ev, char *output) {
 static inline bool
 startswith_ascii_control_char(const char *p) {
     if (!p || !*p) return true;
-    uint32_t codep, state = UTF8_ACCEPT;
+    uint32_t codep; UTF8State state = UTF8_ACCEPT;
     while(*p) {
         if (decode_utf8(&state, &codep, *p) == UTF8_ACCEPT) {
             return codep < 32 || codep == 127;
@@ -424,7 +428,7 @@ encode_glfw_key_event(const GLFWkeyevent *e, const bool cursor_key_mode, const u
     ev.has_text = e->text && !startswith_ascii_control_char(e->text);
     if (!ev.key && !ev.has_text) return 0;
     bool send_text_standalone = !ev.report_text;
-    if (!ev.disambiguate && GLFW_FKEY_KP_0 <= ev.key && ev.key <= GLFW_FKEY_KP_DELETE) {
+    if (!ev.disambiguate && GLFW_FKEY_KP_0 <= ev.key && ev.key <= GLFW_FKEY_KP_BEGIN) {
         ev.key = convert_kp_key_to_normal_key(ev.key);
     }
     switch (e->action) {

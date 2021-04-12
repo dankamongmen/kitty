@@ -185,6 +185,7 @@ static int translateState(int state)
 {
     int mods = 0;
 
+    /* Need some way to expose hyper and meta without xkbcommon-x11 */
     if (state & ShiftMask)
         mods |= GLFW_MOD_SHIFT;
     if (state & ControlMask)
@@ -3085,8 +3086,8 @@ VkResult _glfwPlatformCreateWindowSurface(VkInstance instance,
 }
 
 void
-_glfwPlatformUpdateIMEState(_GLFWwindow *w, int which, int a, int b, int c, int d) {
-    glfw_xkb_update_ime_state(w, &_glfw.x11.xkb, which, a, b, c, d);
+_glfwPlatformUpdateIMEState(_GLFWwindow *w, const GLFWIMEUpdateEvent *ev) {
+    glfw_xkb_update_ime_state(w, &_glfw.x11.xkb, ev);
 }
 
 //////////////////////////////////////////////////////////////////////////

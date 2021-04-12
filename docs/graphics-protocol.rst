@@ -28,7 +28,7 @@ alpha-blending and text over graphics.
     :alt: Demo of graphics rendering in kitty
     :align: center
 
-Some programs that use the kitty graphics protocol:
+Some programs and libraries that use the kitty graphics protocol:
 
  * `termpdf.py <https://github.com/dsanson/termpdf.py>`_ - a terminal PDF/DJVU/CBR viewer
  * `ranger <https://github.com/ranger/ranger>`_ - a terminal file manager, with
@@ -41,6 +41,9 @@ Some programs that use the kitty graphics protocol:
  * `glkitty <https://github.com/michaeljclark/glkitty>`_ - C library to draw OpenGL shaders in the terminal with a glgears demo
  * `ctx.graphics <https://ctx.graphics/>`_ - Library for drawing graphics
  * `timg <https://github.com/hzeller/timg>` - a terminal image and video viewer
+ * `notcurses <https://github.com/dankamongmen/notcurses>`_ - C library for terminal graphics with bindings for C++, Rust and Python
+ * `rasterm <https://github.com/BourgeoisBear/rasterm>`_  - Go library to display images in the the terminal
+
 
 .. contents::
 
@@ -398,6 +401,12 @@ colors.
    number of rows in the image placement rectangle. If either of these cause
    the cursor to leave either the screen or the scroll area, the exact
    positioning of the cursor is undefined, and up to implementations.
+   The client can ask the terminal emulator to not move the cursor at all
+   by specifying ``C=1`` in the command, which sets the cursor movement policy
+   to no movement for placing the current image.
+
+.. versionadded:: 0.20.0
+   Support for the C=1 cursor movement policy
 
 
 Deleting images
@@ -678,6 +687,8 @@ Key      Value                 Default    Description
 ``Y``    Positive integer      ``0``      The y-offset within the first cell at which to start displaying the image
 ``c``    Positive integer      ``0``      The number of columns to display the image over
 ``r``    Positive integer      ``0``      The number of rows to display the image over
+``C``    Positive integer      ``0``      Cursor movement policy. ``0`` is the default, to move the cursor to after the image.
+                                          ``1`` is to not move the cursor at all when placing the image.
 ``z``    32-bit integer        ``0``      The *z-index* vertical stacking order of the image
 
 **Keys for animation frame loading**

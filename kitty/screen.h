@@ -83,7 +83,8 @@ typedef struct {
     CellPixelSize cell_size;
     OverlayLine overlay_line;
     id_type window_id;
-    uint32_t utf8_state, utf8_codepoint, *g0_charset, *g1_charset, *g_charset;
+    uint32_t utf8_codepoint, *g0_charset, *g1_charset, *g_charset;
+    UTF8State utf8_state;
     unsigned int current_charset;
     Selections selections, url_ranges;
     struct {
@@ -229,6 +230,7 @@ void screen_push_key_encoding_flags(Screen *self, uint32_t val);
 void screen_pop_key_encoding_flags(Screen *self, uint32_t num);
 uint8_t screen_current_key_encoding_flags(Screen *self);
 void screen_report_key_encoding_flags(Screen *self);
+void screen_xtmodkeys(Screen *self, uint32_t p1, uint32_t p2);
 #define DECLARE_CH_SCREEN_HANDLER(name) void screen_##name(Screen *screen);
 DECLARE_CH_SCREEN_HANDLER(bell)
 DECLARE_CH_SCREEN_HANDLER(backspace)

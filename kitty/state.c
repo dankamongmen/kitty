@@ -6,6 +6,7 @@
  */
 
 #include "state.h"
+#include "cleanup.h"
 #include <math.h>
 
 GlobalState global_state = {{0}};
@@ -59,6 +60,27 @@ GlobalState global_state = {{0}};
             OSWindow *wp = global_state.os_windows + wn; \
             if (wp->id == cb_window_id && cb_window_id) global_state.callback_os_window = wp; \
     }}
+
+static inline double
+dpi_for_os_window_id(id_type os_window_id) {
+    double dpi = 0;
+    if (os_window_id) {
+        WITH_OS_WINDOW(os_window_id)
+            dpi = (os_window->logical_dpi_x + os_window->logical_dpi_y) / 2.;
+        END_WITH_OS_WINDOW
+    }
+    if (dpi == 0) {
+        dpi = (global_state.default_dpi.x + global_state.default_dpi.y) / 2.;
+    }
+    return dpi;
+}
+
+
+static long
+pt_to_px(double pt, id_type os_window_id) {
+    const double dpi = dpi_for_os_window_id(os_window_id);
+    return ((long)round((pt * (dpi / 72.0))));
+}
 
 
 OSWindow*
@@ -688,6 +710,7 @@ PYWRAP1(set_options) {
     S(dynamic_background_opacity, PyObject_IsTrue);
     S(inactive_text_alpha, PyFloat_AsFloat);
     S(scrollback_pager_history_size, PyLong_AsUnsignedLong);
+    S(scrollback_fill_enlarged_window, PyObject_IsTrue);
     S(cursor_shape, PyLong_AsLong);
     S(cursor_beam_thickness, PyFloat_AsFloat);
     S(cursor_underline_thickness, PyFloat_AsFloat);
@@ -985,26 +1008,11 @@ PYWRAP1(sync_os_window_title) {
 }
 
 
-static inline double
-dpi_for_os_window_id(id_type os_window_id) {
-    double dpi = 0;
-    if (os_window_id) {
-        WITH_OS_WINDOW(os_window_id)
-            dpi = (os_window->logical_dpi_x + os_window->logical_dpi_y) / 2.;
-        END_WITH_OS_WINDOW
-    }
-    if (dpi == 0) {
-        dpi = (global_state.default_dpi.x + global_state.default_dpi.y) / 2.;
-    }
-    return dpi;
-}
-
 PYWRAP1(pt_to_px) {
-    double pt, dpi = 0;
+    double pt;
     id_type os_window_id = 0;
     PA("d|K", &pt, &os_window_id);
-    dpi = dpi_for_os_window_id(os_window_id);
-    return PyLong_FromLong((long)round((pt * (dpi / 72.0))));
+    return PyLong_FromLong(pt_to_px(pt, os_window_id));
 }
 
 PYWRAP1(global_font_size) {
@@ -1244,10 +1252,7 @@ init_state(PyObject *module) {
     PyModule_AddIntConstant(module, "IMPERATIVE_CLOSE_REQUESTED", IMPERATIVE_CLOSE_REQUESTED);
     PyModule_AddIntConstant(module, "NO_CLOSE_REQUESTED", NO_CLOSE_REQUESTED);
     PyModule_AddIntConstant(module, "CLOSE_BEING_CONFIRMED", CLOSE_BEING_CONFIRMED);
-    if (Py_AtExit(finalize) != 0) {
-        PyErr_SetString(PyExc_RuntimeError, "Failed to register the state at exit handler");
-        return false;
-    }
+    register_at_exit_cleanup_func(STATE_CLEANUP_FUNC, finalize);
     return true;
 }
 // }}}

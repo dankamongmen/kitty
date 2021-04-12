@@ -514,6 +514,10 @@ The current implementation stores the data in UTF-8, so approximatively
 10000 lines per megabyte at 100 chars per line, for pure ASCII text, unformatted text.
 A value of zero or less disables this feature. The maximum allowed size is 4GB.'''))
 
+o('scrollback_fill_enlarged_window', False, long_text=_('''
+Fill new space with lines from the scrollback buffer after enlarging a window.
+'''))
+
 o('wheel_scroll_multiplier', 5.0, long_text=_('''
 Modify the amount scrolled by the mouse wheel. Note this is only used for low
 precision scrolling devices, not for high precision scrolling on platforms such
@@ -1571,6 +1575,8 @@ g('shortcuts.misc')  # {{{
 k('toggle_fullscreen', 'kitty_mod+f11', 'toggle_fullscreen', _('Toggle fullscreen'))
 k('toggle_maximized', 'kitty_mod+f10', 'toggle_maximized', _('Toggle maximized'))
 k('input_unicode_character', 'kitty_mod+u', 'kitten unicode_input', _('Unicode input'))
+if is_macos:
+    k('input_unicode_character', 'cmd+ctrl+space', 'kitten unicode_input', _('Unicode input'), add_to_docs=False)
 k('edit_config_file', 'kitty_mod+f2', 'edit_config_file', _('Edit config file'))
 if is_macos:
     k('edit_config_file', 'cmd+,', 'edit_config_file', _('Edit config file'), add_to_docs=False)
